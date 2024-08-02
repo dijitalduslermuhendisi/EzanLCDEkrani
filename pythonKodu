@@ -1,0 +1,64 @@
+import requests
+import datetime
+import serial
+import time
+
+def get_prayer_times():
+    url = "https://api.aladhan.com/v1/timingsByCity?city=Adana&country=Turkey&method=13"
+    response = requests.get(url)
+    data = response.json()
+    timings = data['data']['timings']
+    
+    prayer_times = {
+        "Imsak": datetime.datetime.strptime(timings['Fajr'], "%H:%M").time(),
+        "Gunes": datetime.datetime.strptime(timings['Sunrise'], "%H:%M").time(),
+        "Ogle": datetime.datetime.strptime(timings['Dhuhr'], "%H:%M").time(),
+        "Ikindi": datetime.datetime.strptime(timings['Asr'], "%H:%M").time(),
+        "Aksam": datetime.datetime.strptime(timings['Maghrib'], "%H:%M").time(),
+        "Yatsi": datetime.datetime.strptime(timings['Isha'], "%H:%M").time()
+    }
+    return prayer_times
+
+def send_to_arduino(ser, message):
+    ser.write(message.encode())
+
+def get_next_prayer(now, prayer_times):
+    today = datetime.date.today()
+    tomorrow = today + datetime.timedelta(days=1)
+    
+    # Bugünün ve yarının vakitlerini birleştir
+    combined_times = [
+        (name, datetime.datetime.combine(today, time))
+        for name, time in prayer_times.items()
+    ] + [
+        (name, datetime.datetime.combine(tomorrow, time))
+        for name, time in prayer_times.items()
+    ]
+    
+    # Şu anki zamandan sonraki ilk vakti bul
+    now_datetime = datetime.datetime.combine(today, now)
+    next_prayer = min((prayer for prayer in combined_times if prayer[1] > now_datetime), key=lambda x: x[1])
+    
+    return next_prayer
+
+arduino_port = 'COM5'  # Arduino'nun bağlı olduğu portu buraya yazın
+baud_rate = 9600
+
+ser = serial.Serial(arduino_port, baud_rate, timeout=1)
+time.sleep(2)  # Arduino'nun başlaması için bekleyin
+
+while True:
+    now = datetime.datetime.now().time()
+    prayer_times = get_prayer_times()
+    
+    next_prayer = get_next_prayer(now, prayer_times)
+    time_diff = next_prayer[1] - datetime.datetime.combine(datetime.date.today(), now)
+    
+    minutes_left = int(time_diff.total_seconds() / 60)
+    
+    message = f"{next_prayer[0]},{minutes_left}\n"
+    send_to_arduino(ser, message)
+    
+    print(f"Sonraki ezan: {next_prayer[0]}, Kalan süre: {minutes_left} dakika")  # Debug için
+    
+    time.sleep(60)  # Her dakika güncelle

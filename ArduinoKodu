@@ -1,0 +1,44 @@
+#include<Wire.h>
+#include<LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+String nextPrayer = "";
+int minutesLeft = 0;
+void setup() {
+ Serial.begin(9600);
+ lcd.init();
+ lcd.backlight();
+}
+
+void loop() {
+  if (Serial.available() > 0){
+     String data = Serial.readStringUntil('\n');
+     int commaIndex = data.indexOf(',');
+
+     if (commaIndex != -1){
+       nextPrayer = data.substring(0, commaIndex);
+       minutesLeft = data.substring(commaIndex + 1).toInt();
+
+       updateDisplay();
+      }
+    }
+}
+
+void updateDisplay(){
+   lcd.clear();
+   lcd.setCursor(0, 0);
+   lcd.print(nextPrayer + " vakti:");
+   lcd.setCursor(0, 1);
+
+   if (minutesLeft == 0){
+     lcd.print("Ezan okunuyor");
+    } else {
+       int hours = minutesLeft / 60;
+       int mins = minutesLeft %60;
+       lcd.print(hours);
+       lcd.print(" saat ");
+       lcd.print(mins);
+       lcd.print(" dakika");
+    }
+  }
